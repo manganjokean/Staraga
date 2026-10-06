@@ -50,8 +50,16 @@ const W = canvas.width, H = canvas.height;
 const stars = Array.from({length: 80}, () => ({x: Math.random()*W, y: Math.random()*H, s: Math.random()*1.5+0.5}));
 
 let keys = {};
-let bullets = [], enemyBullets = [], enemies = [], explosions = [];
+let bullets = [], enemyBullets = [], enemies = [], explosions = [], powerups = [];
 let score = 0, lives = 3, wave = 0, gameOver = false, waveTimer = 0;
+let frame = 0, rapidUntil = 0, spreadUntil = 0, slowUntil = 0, shield = false;
+
+const POWER_TYPES = [
+  { type: 'rapid',  label: 'R', color: '#ffe97a', name: 'RAPID FIRE' },
+  { type: 'spread', label: 'T', color: '#7af',    name: 'TRIPLE SHOT' },
+  { type: 'shield', label: 'S', color: '#8f8',    name: 'SHIELD' },
+  { type: 'slow',   label: 'Z', color: '#c8f',    name: 'SLOW TIME' },
+];
 
 const player = { x: W/2, y: H-60, w: 28, h: 20, cool: 0 };
 
@@ -67,6 +75,9 @@ function spawnWave() {
   wave++;
   enemies = [];
   const isBoss = wave % 3 === 0;
+  const t = POWER_TYPES[Math.floor(Math.random() * POWER_TYPES.length)];
+  powerups.push({ ...t, x: 60 + Math.random() * (W - 120), y: 30, vy: 1.5 });
+
   if (isBoss) {
     const t = TYPES[3];
     enemies.push({ ...t, x: W/2, y: 80, w: 60, h: 40, vx: 1.5, vy: 0, hp: t.hp + wave, t: 0 });
@@ -81,7 +92,15 @@ function spawnWave() {
 }
 
 function fire() {
-  bullets.push({ x: player.x, y: player.y - 14, vy: -8 });
+  const rapid = frame < rapidUntil;
+  if (frame < spreadUntil) {
+    bullets.push({ x: player.x, y: player.y - 14, vy: -8, vx: -2 });
+    bullets.push({ x: player.x, y: player.y - 14, vy: -8, vx: 0 });
+    bullets.push({ x: player.x, y: player.y - 14, vy: -8, vx: 2 });
+  } else {
+    bullets.push({ x: player.x, y: player.y - 14, vy: -8, vx: 0 });
+  }
+  return rapid;
 }
 
 function explode(x, y, color) { explosions.push({x, y, r: 4, color, life: 20}); }
@@ -98,21 +117,38 @@ function update() {
   player.x = Math.max(16, Math.min(W-16, player.x));
   player.y = Math.max(H*0.55, Math.min(H-20, player.y));
 
-  if ((keys[' '] || keys['z']) && player.cool <= 0) { fire(); player.cool = 12; }
+  frame++;
+  const slow = frame < slowUntil ? 0.5 : 1;
+  if ((keys[' '] || keys['z']) && player.cool <= 0) {
+    const rapid = fire();
+    player.cool = rapid ? 5 : 12;
+  }
   if (player.cool > 0) player.cool--;
 
-  bullets.forEach(b => b.y += b.vy);
+  bullets.forEach(b => { b.y += b.vy; b.x += (b.vx || 0); });
   bullets = bullets.filter(b => b.y > -10);
-  enemyBullets.forEach(b => b.y += b.vy);
+  enemyBullets.forEach(b => b.y += b.vy * slow);
   enemyBullets = enemyBullets.filter(b => b.y < H+10);
+  powerups.forEach(p => p.y += p.vy);
+  powerups = powerups.filter(p => p.y < H + 20);
+  powerups.forEach((p, i) => {
+    if (Math.abs(p.x - player.x) < 18 && Math.abs(p.y - player.y) < 18) {
+      powerups.splice(i, 1);
+      if (p.type === 'rapid') rapidUntil = frame + 600;
+      if (p.type === 'spread') spreadUntil = frame + 600;
+      if (p.type === 'slow') slowUntil = frame + 600;
+      if (p.type === 'shield') shield = true;
+      explode(p.x, p.y, p.color);
+    }
+  });
   explosions.forEach(e => { e.r += 2; e.life--; });
   explosions = explosions.filter(e => e.life > 0);
 
   enemies.forEach(e => {
     e.t += 0.02;
-    if (e.boss) { e.x += e.vx; if (e.x < 60 || e.x > W-60) e.vx *= -1; if (Math.random() < 0.03) enemyBullets.push({x: e.x, y: e.y+30, vy: 4}); }
-    else if (e.home) { e.x += e.vx * Math.cos(e.t); e.y += Math.sin(e.t*2)*0.4; if (e.x < 30 || e.x > W-30) e.vx *= -1; if (Math.random() < 0.002 + wave*0.0005) e.dive = true; }
-    else if (e.dive) { e.y += 3; e.x += Math.sin(e.t*3)*2; if (Math.random() < 0.03) enemyBullets.push({x: e.x, y: e.y+12, vy: 5}); if (e.y > H-40) { e.dive = false; e.home = true; e.y = 60; } }
+    if (e.boss) { e.x += e.vx * slow; if (e.x < 60 || e.x > W-60) e.vx *= -1; if (Math.random() < 0.03) enemyBullets.push({x: e.x, y: e.y+30, vy: 4}); }
+    else if (e.home) { e.x += e.vx * Math.cos(e.t) * slow; e.y += Math.sin(e.t*2)*0.4*slow; if (e.x < 30 || e.x > W-30) e.vx *= -1; if (Math.random() < 0.002 + wave*0.0005) e.dive = true; }
+    else if (e.dive) { e.y += 3*slow; e.x += Math.sin(e.t*3)*2*slow; if (Math.random() < 0.03) enemyBullets.push({x: e.x, y: e.y+12, vy: 5}); if (e.y > H-40) { e.dive = false; e.home = true; e.y = 60; } }
   });
 
   // bullet vs enemy
@@ -126,13 +162,17 @@ function update() {
   // enemy bullet vs player
   enemyBullets.forEach((b, bi) => {
     if (Math.abs(b.x - player.x) < 14 && Math.abs(b.y - player.y) < 12) {
-      enemyBullets.splice(bi,1); explode(player.x, player.y, '#6cf'); lives--;
-      if (lives <= 0) gameOver = true;
+      enemyBullets.splice(bi,1);
+      if (shield) { shield = false; explode(player.x, player.y, '#8f8'); }
+      else { explode(player.x, player.y, '#6cf'); lives--; if (lives <= 0) gameOver = true; }
     }
   });
   // enemy dive into player
   enemies.forEach(e => {
-    if (e.dive && Math.abs(e.x-player.x) < 16 && Math.abs(e.y-player.y) < 16) { explode(player.x, player.y, '#6cf'); lives--; if (lives <= 0) gameOver = true; }
+    if (e.dive && Math.abs(e.x-player.x) < 16 && Math.abs(e.y-player.y) < 16) {
+      if (shield) { shield = false; explode(player.x, player.y, '#8f8'); }
+      else { explode(player.x, player.y, '#6cf'); lives--; if (lives <= 0) gameOver = true; }
+    }
   });
 
   if (started && !gameOver && enemies.length === 0) { waveTimer++; if (waveTimer > 60) { spawnWave(); waveTimer = 0; } }
@@ -195,6 +235,11 @@ function draw() {
 
   ctx.fillStyle = '#8ff'; bullets.forEach(b => ctx.fillRect(b.x-2, b.y-8, 4, 10));
   ctx.fillStyle = '#f66'; enemyBullets.forEach(b => ctx.fillRect(b.x-2, b.y-4, 4, 8));
+  powerups.forEach(p => {
+    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, 6.28); ctx.fill();
+    ctx.fillStyle = '#112'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.fillText(p.label, p.x, p.y + 4);
+  });
+  if (shield) { ctx.strokeStyle = '#8f8'; ctx.beginPath(); ctx.arc(player.x, player.y, 20, 0, 6.28); ctx.stroke(); }
   explosions.forEach(e => { ctx.strokeStyle = e.color; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.28); ctx.stroke(); });
 
   ctx.fillStyle = '#8ff'; ctx.font = '14px monospace'; ctx.textAlign = 'left';
@@ -214,7 +259,8 @@ document.getElementById('startBtn').onclick = () => {
   difficulty = parseFloat(document.getElementById('difficulty').value);
   lives = parseInt(document.getElementById('livesSel').value);
   speed = parseInt(document.getElementById('speedSel').value);
-  score = 0; wave = 0; gameOver = false; bullets = []; enemyBullets = []; explosions = []; enemies = []; waveTimer = 0;
+  score = 0; wave = 0; gameOver = false; bullets = []; enemyBullets = []; explosions = []; enemies = []; powerups = []; waveTimer = 0;
+  rapidUntil = 0; spreadUntil = 0; slowUntil = 0; shield = false; frame = 0;
   player.x = W/2; player.y = H-60;
   menuEl.style.display = 'none'; settingsEl.style.display = 'none';
   started = true; spawnWave();
