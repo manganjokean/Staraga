@@ -146,9 +146,9 @@ function update() {
 
   enemies.forEach(e => {
     e.t += 0.02;
-    if (e.boss) { e.x += e.vx * slow; if (e.x < 60 || e.x > W-60) e.vx *= -1; if (Math.random() < 0.03) enemyBullets.push({x: e.x, y: e.y+30, vy: 4}); }
-    else if (e.home) { e.x += e.vx * Math.cos(e.t) * slow; e.y += Math.sin(e.t*2)*0.4*slow; if (e.x < 30 || e.x > W-30) e.vx *= -1; if (Math.random() < 0.002 + wave*0.0005) e.dive = true; }
-    else if (e.dive) { e.y += 3*slow; e.x += Math.sin(e.t*3)*2*slow; if (Math.random() < 0.03) enemyBullets.push({x: e.x, y: e.y+12, vy: 5}); if (e.y > H-40) { e.dive = false; e.home = true; e.y = 60; } }
+    if (e.boss) { e.x += e.vx * slow; if (e.x < 60 || e.x > W-60) e.vx *= -1; if (Math.random() < 0.01 + wave*0.005) enemyBullets.push({x: e.x, y: e.y+30, vy: 3 + wave*0.3}); }
+    else if (e.home) { e.x += e.vx * Math.cos(e.t) * slow; e.y += Math.sin(e.t*2)*0.4*slow; if (e.x < 30 || e.x > W-30) e.vx *= -1; if (Math.random() < 0.002 + wave*0.0005) e.dive = true; if (Math.random() < 0.003 * wave) enemyBullets.push({x: e.x, y: e.y+12, vy: 3 + wave*0.3}); }
+    else if (e.dive) { e.y += 3*slow; e.x += Math.sin(e.t*3)*2*slow; if (Math.random() < 0.01 + wave*0.006) enemyBullets.push({x: e.x, y: e.y+12, vy: 4 + wave*0.3}); if (e.y > H-40) { e.dive = false; e.home = true; e.y = 60; } }
   });
 
   // bullet vs enemy
@@ -247,12 +247,29 @@ function draw() {
   ctx.fillText(`LIVES ${lives}`, 10, 40);
   ctx.textAlign = 'right'; ctx.fillText(`WAVE ${wave}`, W-10, 20);
   if (wave === 0) { ctx.textAlign='center'; ctx.fillStyle='#ffe97a'; ctx.font='20px monospace'; ctx.fillText('STAR FOX GALAGA', W/2, H/2 - 20); ctx.fillStyle='#8ff'; ctx.font='12px monospace'; ctx.fillText('Arrows/WASD move, SPACE fire — press SPACE to start', W/2, H/2+10); }
-  if (gameOver) { ctx.textAlign='center'; ctx.fillStyle='#f66'; ctx.font='28px monospace'; ctx.fillText('GAME OVER', W/2, H/2); ctx.fillStyle='#8ff'; ctx.font='14px monospace'; ctx.fillText("press M for menu", W/2, H/2+30); }
+  if (gameOver) {
+  ctx.fillStyle = 'rgba(5,5,16,0.75)'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle='#f66'; ctx.font='32px monospace'; ctx.fillText('GAME OVER', W/2, H/2 - 50);
+  ctx.fillStyle='#ffe97a'; ctx.font='16px monospace'; ctx.fillText(`SCORE: ${score}`, W/2, H/2 - 10);
+  ctx.fillText(`WAVE REACHED: ${wave}`, W/2, H/2 + 16);
+  ctx.fillStyle='#8ff'; ctx.font='13px monospace';
+  ctx.fillText('Press R to restart', W/2, H/2 + 56);
+  ctx.fillText('Press M for menu', W/2, H/2 + 78);
+}
 }
 
 let started = false;
 let speed = 5, difficulty = 1;
 addEventListener('keydown', e => { keys[e.key] = true; if (e.key === ' ') e.preventDefault(); if (gameOver && (e.key === 'm' || e.key === 'M')) { started = false; gameOver = false; enemies = []; menuEl.style.display = 'flex'; } });
+addEventListener('keydown', e => {
+  if (gameOver && (e.key === 'r' || e.key === 'R')) {
+    score = 0; wave = 0; gameOver = false; bullets = []; enemyBullets = []; explosions = []; enemies = []; powerups = []; waveTimer = 0;
+    rapidUntil = 0; spreadUntil = 0; slowUntil = 0; shield = false; frame = 0;
+    player.x = W/2; player.y = H-60;
+    started = true; spawnWave();
+  }
+});
 
 const menuEl = document.getElementById('menu'), settingsEl = document.getElementById('settings');
 document.getElementById('startBtn').onclick = () => {
